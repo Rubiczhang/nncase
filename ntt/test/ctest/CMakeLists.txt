@@ -91,24 +91,24 @@ file(GLOB HANDWRITTEN_TESTS CONFIGURE_DEPENDS
     # test_ntt_binary_sub.cpp
     # test_ntt_cast.cpp
     # test_ntt_unary_abs.cpp
-    # test_ntt_clamp.cpp
-    # test_ntt_compare_equal.cpp
-    # test_ntt_compare_greater_or_equal.cpp
-    # test_ntt_compare_greater.cpp
-    # test_ntt_compare_less_or_equal.cpp
-    # test_ntt_compare_less.cpp
-    # test_ntt_expand.cpp
-    # test_ntt_gather.cpp
-    # test_ntt_layer_norm.cpp
-    # test_ntt_matmul.cpp
-    # test_ntt_reduce.cpp
-    # test_ntt_rms_norm.cpp
-    # test_ntt_scatter_nd.cpp
-    # test_ntt_slice.cpp
-    # test_ntt_softmax.cpp
-    # test_ntt_transpose.cpp
-    # test_ntt_unpack.cpp
-    # test_ntt_where.cpp
+    test_ntt_clamp.cpp
+    test_ntt_compare_equal.cpp
+    test_ntt_compare_greater_or_equal.cpp
+    test_ntt_compare_greater.cpp
+    test_ntt_compare_less_or_equal.cpp
+    test_ntt_compare_less.cpp
+    test_ntt_expand.cpp
+    test_ntt_gather.cpp
+    test_ntt_layer_norm.cpp
+    test_ntt_matmul.cpp
+    test_ntt_reduce.cpp
+    test_ntt_rms_norm.cpp
+    test_ntt_scatter_nd.cpp
+    test_ntt_slice.cpp
+    test_ntt_softmax.cpp
+    test_ntt_transpose.cpp
+    test_ntt_unpack.cpp
+    test_ntt_where.cpp
     # test_ntt_cast_from_float32_generated.cpp
 )
 

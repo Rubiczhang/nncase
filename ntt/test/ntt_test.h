@@ -182,6 +182,9 @@ T nextToNeg1(T x) {
 
 
 template <typename T> T ulp(T x) {
+    if constexpr (std::is_same_v<T, bool>) {
+        return x;  // ULP is meaningless for boolean, just return the value
+    }
     // For standard floating point types (float, double, long double)
     if constexpr (std::is_same_v<T, float> || std::is_same_v<T, double> || std::is_same_v<T, long double>) {
         x = std::fabs(x);
@@ -211,9 +214,13 @@ bool are_close(T a, T b, double abs_tol = 1e-6,  double rel_tol = 1e-5) {
     if (a == b) {
         return true;
     }
+
+    if constexpr (std::is_same_v<T, bool> || requires { typename T::element_type; } && std::is_same_v<typename T::element_type, bool>){
+        return a == b;
+    }
     
     // ULP check for all non-integer types (including float, half, double, etc.)
-    if constexpr (!std::is_integral_v<T>) {
+    if constexpr (!std::is_integral_v<T> && !std::is_same_v<T, bool> && !(requires { typename T::element_type; } && std::is_same_v<typename T::element_type, bool>)) {
         // std::cout << "std::fabs(a-b) " << std::fabs((a-b))  <<std::endl;
         // std::cout << "ulp(b):" <<ulp(b) << "   ulp(a)" << ulp(a) << std::endl;
 
@@ -233,6 +240,12 @@ bool are_close(T a, T b, double abs_tol = 1e-6,  double rel_tol = 1e-5) {
 
 
     return std::abs(double(a - b)) <= std::max(abs_tol, rel_tol * std::max(std::abs(double(a)), std::abs(double(b))));
+}
+
+
+template <>
+bool are_close(bool a, bool b,  [[maybe_unused]] double abs_tol,  [[maybe_unused]] double rel_tol ) {
+    return a == b;
 }
 
 template <typename T, TensorOrVector TTensor> 
