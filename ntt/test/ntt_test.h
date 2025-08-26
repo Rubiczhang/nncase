@@ -289,12 +289,21 @@ inline double calculate_cosine_similarity(const std::vector<double>& v1, const s
 template <ntt::TensorOrVector TTensor1, ntt::TensorOrVector TTensor2>
 bool compare_tensor(TTensor1 &lhs, TTensor2 &rhs, double threshold = 0.999f) {
     if (lhs.shape().rank() != rhs.shape().rank()) {
+        std::cout << "rank doesn't match\n" 
+                << "lhs.shape().rank():" << lhs.shape().rank()
+                << "rhs.shape().rank()" <<  rhs.shape().rank()
+                << std::endl;
         return false;
     }
 
     for (size_t i = 0; i < lhs.shape().rank(); i++)
-        if (lhs.shape()[i] != rhs.shape()[i])
+        if (lhs.shape()[i] != rhs.shape()[i]){
+            std::cout << "shape doesn't match at dimension " << i << "\n"
+                      << "lhs.shape()[" << i << "]:" << lhs.shape()[i]
+                      << "rhs.shape()[" << i << "]:" <<  rhs.shape()[i]
+                      << std::endl;
             return false;
+        }
 
     std::vector<double> v1;
     std::vector<double> v2;
