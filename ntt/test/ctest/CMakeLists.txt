@@ -1,12 +1,12 @@
 enable_testing()
+
 # How to run a single test case:
 # 1. Build only the specific test executable (using test_ntt_pack_generated_Uint32 as an example):
-#    cmake --build build/<BuildType> --target test_ntt_pack_generated_Uint32
-#    where <BuildType> is typically Debug, Release, etc.
+# cmake --build build/<BuildType> --target test_ntt_pack_generated_Uint32
+# where <BuildType> is typically Debug, Release, etc.
 # 2. Execute the corresponding test in the generated test directory (use the same <BuildType>):
-#    ctest -C <BuildType> --test-dir build/<BuildType>/ntt/test/ctest -R test_ntt_pack_generated_Uint32
-#    -C specifies the build configuration, and -R filters the test by regex.
-
+# ctest -C <BuildType> --test-dir build/<BuildType>/ntt/test/ctest -R test_ntt_pack_generated_Uint32
+# -C specifies the build configuration, and -R filters the test by regex.
 find_package(ortki)
 find_package(GTest REQUIRED)
 find_package(Python3 REQUIRED)
@@ -39,6 +39,7 @@ macro(run_generator_if_needed script_path output_file)
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
             RESULT_VARIABLE return_code
         )
+
         if(NOT return_code EQUAL 0)
             message(FATAL_ERROR "${script_path} failed to run. Error code: ${return_code}")
         endif()
@@ -46,6 +47,7 @@ macro(run_generator_if_needed script_path output_file)
         message(STATUS "Skipping script execution, ${output_file} is up-to-date.")
     endif()
 endmacro()
+
 
 # Automatically process all kernel generators
 foreach(kernel ${KERNEL_NAMES})
@@ -72,6 +74,7 @@ macro(add_test_exec test_source_file)
     target_compile_options(${tname} PRIVATE )
     target_link_libraries(${tname} PRIVATE GTest::gtest_main nncaseruntime ortki::ortki)
     add_test(NAME ${tname} COMMAND ${CMAKE_COMMAND} -DTEST_EXECUTABLE=$<TARGET_FILE:${tname}> -P ${NNCASE_CMAKE_DIR}/run_test.cmake)
+
 endmacro()
 
 file(GLOB HANDWRITTEN_TESTS CONFIGURE_DEPENDS
@@ -90,6 +93,7 @@ file(GLOB HANDWRITTEN_TESTS CONFIGURE_DEPENDS
     # test_ntt_binary_mul.cpp
     # test_ntt_binary_sub.cpp
     # test_ntt_cast.cpp
+
     # test_ntt_unary_abs.cpp
     test_ntt_clamp.cpp
     test_ntt_compare_equal.cpp
@@ -116,6 +120,7 @@ file(GLOB HANDWRITTEN_TESTS CONFIGURE_DEPENDS
 list(APPEND TEST_NAMES ${HANDWRITTEN_TESTS} ${GENERATED_TEST_SOURCES})
 # list(APPEND TEST_NAMES ${HANDWRITTEN_TESTS} )
 # list(APPEND TEST_NAMES ${GENERATED_TEST_SOURCES} )
+
 
 foreach(test_file ${TEST_NAMES})
     add_test_exec(${test_file})
