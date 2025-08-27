@@ -127,7 +127,7 @@ log(x) = x - x^2 / 2 + p8x^3 + ... + p0x^11 + (q1 + q2) * e
 */
 
 #define _RVV_FLOAT32_LOG_OP(LMUL, MLEN)                                        \
-    static inline vfloat32m##LMUL##_t log_ps(vfloat32m##LMUL##_t x,            \
+    static inline vfloat32m##LMUL##_t log_ps_fp32(vfloat32m##LMUL##_t x,            \
                                              size_t vl) {                      \
         auto ux = __riscv_vreinterpret_v_f32m##LMUL##_i32m##LMUL(x);           \
         auto emm0 = __riscv_vsra_vx_i32m##LMUL(ux, 23, vl);                    \
@@ -201,7 +201,7 @@ _RVV_FLOAT32_LOG_OP(8, 4)
 #define _RVV_FLOAT_EXP_OP(LMUL, MLEN, TLEN, E, M)                              \
     static inline __attribute__((optimize("no-schedule-insns2")))              \
         vfloat##TLEN##m##LMUL##_t                                              \
-        exp_ps(vfloat##TLEN##m##LMUL##_t x, size_t vl) {                       \
+        exp_ps_fp32(vfloat##TLEN##m##LMUL##_t x, size_t vl) {                       \
         auto a1 = __riscv_vfmv_v_f_f##TLEN##m##LMUL(c_cephes_LOG2EF, vl);      \
         auto c1 = __riscv_vfmv_v_f_f##TLEN##m##LMUL(c_cephes_exp_p1, vl);      \
         auto c3 = __riscv_vfmv_v_f_f##TLEN##m##LMUL(c_cephes_exp_p3, vl);      \
@@ -470,83 +470,74 @@ _RVV_FLOAT_TANH_OP(2, 16, 32)
 _RVV_FLOAT_TANH_OP(4, 8, 32)
 _RVV_FLOAT_TANH_OP(8, 4, 32)
 
-#define _RVV_FLOAT_FLOOR_OP(LMUL, MLEN, TLEN)                                \
-    static inline vfloat##TLEN##m##LMUL##_t vfloor_v_f##TLEN##m##LMUL(        \
-        vfloat##TLEN##m##LMUL##_t val, size_t vl) {                          \
-        /* 1. Cast float to int(Round Towards Zero) */   \
-        vint##TLEN##m##LMUL##_t i_val =                                      \
-            __riscv_vfcvt_rtz_x_f_v_i##TLEN##m##LMUL(val, vl);               \
-        /* 2. Cast int back to float*/                 \
-        return __riscv_vfcvt_f_x_v_f##TLEN##m##LMUL(i_val, vl);              \
-    }
-_RVV_FLOAT_FLOOR_OP(1, 32, 32)
-_RVV_FLOAT_FLOOR_OP(2, 16, 32)
+
 
 const float fp32_inf = std::numeric_limits<float>::infinity();
-//To Reuse this blopck, following should be done:
-// 1. replace {i/f}32 to {i/f}TLEN
-// 2. using anthor macro to get the "twoPow24" or we say threshold for different float len
-#define __RVV_FLOAT32_IS_INTEGER(LMUL, MLEN)                           \
-    static inline vbool##MLEN##_t __vfloat32_is_integer_##LMUL(         \
-        vfloat32m##LMUL##_t v, size_t vl) {                               \
-        const float twoPow24 = 16777216.0f;                       \
-        /* huge float must have integer value */  \
-        auto v_abs = __riscv_vfabs_v_f32m##LMUL(v, vl);                 \
-        auto huge_float_flag = __riscv_vmfgt_vf_f32m##LMUL##_b##MLEN(v_abs, twoPow24, vl); \
-        auto v_is_not_inf_flag = __riscv_vmfne_vf_f32m##LMUL##_b##MLEN(v, fp32_inf, vl); \
+#define __RVV_FLOAT_IS_INTEGER(LMUL, MLEN, TLEN, THRESHOLD, INF_VAL)        \
+    static inline vbool##MLEN##_t __vfloat##TLEN##_is_integer_##LMUL(       \
+        vfloat##TLEN##m##LMUL##_t v, size_t vl) {                           \
+        const auto always_int_threshold = THRESHOLD;                       \
+        /* huge float must have integer value */                            \
+        auto v_abs = __riscv_vfabs_v_f##TLEN##m##LMUL(v, vl);               \
+        auto huge_float_flag = __riscv_vmfgt_vf_f##TLEN##m##LMUL##_b##MLEN(v_abs, always_int_threshold, vl); \
+        auto v_is_not_inf_flag = __riscv_vmfne_vf_f##TLEN##m##LMUL##_b##MLEN(v, INF_VAL, vl); \
         huge_float_flag = __riscv_vmand_mm_b##MLEN(huge_float_flag, v_is_not_inf_flag, vl); \
-        auto v_to_int = __riscv_vfcvt_rtz_x_f_v_i32m##LMUL(v, vl);             \
-        auto back_to_float = __riscv_vfcvt_f_x_v_f32m##LMUL(v_to_int, vl);       \
-        auto is_int_flag = __riscv_vmfeq_vv_f32m##LMUL##_b##MLEN(v, back_to_float, vl); \
-        return __riscv_vmor_mm_b##MLEN(huge_float_flag, is_int_flag, vl);       \
+        auto v_to_int = __riscv_vfcvt_rtz_x_f_v_i##TLEN##m##LMUL(v, vl);    \
+        auto back_to_float = __riscv_vfcvt_f_x_v_f##TLEN##m##LMUL(v_to_int, vl); \
+        auto is_int_flag = __riscv_vmfeq_vv_f##TLEN##m##LMUL##_b##MLEN(v, back_to_float, vl); \
+        return __riscv_vmor_mm_b##MLEN(huge_float_flag, is_int_flag, vl);   \
     }
 
-__RVV_FLOAT32_IS_INTEGER(1, 32)
-__RVV_FLOAT32_IS_INTEGER(2, 16)
-__RVV_FLOAT32_IS_INTEGER(4, 8)
-__RVV_FLOAT32_IS_INTEGER(8, 4)
+//for a fp32 which is greater than  8388608, it must be a interger val
+__RVV_FLOAT_IS_INTEGER(1, 32, 32, 8388608.0f, fp32_inf)
+__RVV_FLOAT_IS_INTEGER(2, 16, 32, 8388608.0f, fp32_inf)
+__RVV_FLOAT_IS_INTEGER(4, 8, 32, 8388608.0f, fp32_inf)
+__RVV_FLOAT_IS_INTEGER(8, 4, 32, 8388608.0f, fp32_inf)
 
-#define __RVV_FLOAT32_IS_EVEN(LMUL, MLEN)                       \
-    static inline vbool##MLEN##_t __vfloat32_is_even_##LMUL(                \
-        vfloat32m##LMUL##_t v, size_t vl) {                                   \
-        const float twoPow24 = 16777216.0f;                       \
-        auto v_abs = __riscv_vfabs_v_f32m##LMUL(v, vl);                 \
-        auto huge_float_flag = __riscv_vmfgt_vf_f32m##LMUL##_b##MLEN(v_abs, twoPow24, vl); \
-        auto v_is_not_inf_flag = __riscv_vmfne_vf_f32m##LMUL##_b##MLEN(v, fp32_inf, vl); \
+#define __RVV_FLOAT_IS_EVEN(LMUL, MLEN, TLEN, THRESHOLD, INF_VAL)        \
+    static inline vbool##MLEN##_t __vfloat##TLEN##_is_even_##LMUL(                \
+        vfloat##TLEN##m##LMUL##_t v, size_t vl) {                                   \
+        const auto always_even_threshold = THRESHOLD;                       \
+        auto v_abs = __riscv_vfabs_v_f##TLEN##m##LMUL(v, vl);                 \
+        auto huge_float_flag = __riscv_vmfgt_vf_f##TLEN##m##LMUL##_b##MLEN(v_abs, always_even_threshold, vl); \
+        auto v_is_not_inf_flag = __riscv_vmfne_vf_f##TLEN##m##LMUL##_b##MLEN(v, INF_VAL, vl); \
         huge_float_flag = __riscv_vmand_mm_b##MLEN(huge_float_flag, v_is_not_inf_flag, vl); \
         /* test if v == ((int)v /2 * 2) */                                                                        \
-        auto v_to_int = __riscv_vfcvt_rtz_x_f_v_i32m##LMUL(v, vl);             \
-        auto v_to_int_div2 = __riscv_vsra_vx_i32m##LMUL(v_to_int, 1, vl);     \
-        auto v_div_mul_2 = __riscv_vsll_vx_i32m##LMUL(v_to_int_div2, 1, vl);   \
-        auto is_even_flag = __riscv_vmseq_vv_i32m##LMUL##_b##MLEN(v_to_int, v_div_mul_2, vl); \
+        auto v_to_int = __riscv_vfcvt_rtz_x_f_v_i##TLEN##m##LMUL(v, vl);             \
+        auto v_to_int_div2 = __riscv_vsra_vx_i##TLEN##m##LMUL(v_to_int, 1, vl);     \
+        auto v_div_mul_2 = __riscv_vsll_vx_i##TLEN##m##LMUL(v_to_int_div2, 1, vl);   \
+        auto is_even_flag = __riscv_vmseq_vv_i##TLEN##m##LMUL##_b##MLEN(v_to_int, v_div_mul_2, vl); \
         return __riscv_vmor_mm_b##MLEN(huge_float_flag, is_even_flag, vl);                                                  \
     }
 
-__RVV_FLOAT32_IS_EVEN(1, 32)
-__RVV_FLOAT32_IS_EVEN(2, 16)
-__RVV_FLOAT32_IS_EVEN(4, 8)
-__RVV_FLOAT32_IS_EVEN(8, 4)
+//for a fp32 which is greater than 16777216, it must be a  even val
+__RVV_FLOAT_IS_EVEN(1, 32, 32, 16777216.0f, fp32_inf)
+__RVV_FLOAT_IS_EVEN(2, 16, 32, 16777216.0f, fp32_inf)
+__RVV_FLOAT_IS_EVEN(4, 8, 32, 16777216.0f, fp32_inf)
+__RVV_FLOAT_IS_EVEN(8, 4, 32, 16777216.0f, fp32_inf)
 
+const float fp32_nan = std::nanf("");
+const float fp32_0 = 0.f;
 #define _RVV_FLOAT_POW_OP(LMUL, MLEN, TLEN)                                   \
-    static inline vfloat##TLEN##m##LMUL##_t pow_ps(                          \
+    static inline vfloat##TLEN##m##LMUL##_t pow_ps_fp##TLEN(                          \
         vfloat##TLEN##m##LMUL##_t a, vfloat##TLEN##m##LMUL##_t b, size_t vl) { \
         /* --- constants --- */                                              \
-        float scalar_nan = nanf("");   \
+        auto scalar_nan = fp##TLEN##_nan; \
         auto nan_vector = __riscv_vfmv_v_f_f##TLEN##m##LMUL(scalar_nan, vl); \
         COMPILER_BARRIER();                                                         \
         /* --- input a  --- */                                               \
-        auto neg_a_mask = __riscv_vmflt_vf_f##TLEN##m##LMUL##_b##MLEN(a, 0.f, vl); \
+        auto neg_a_mask = __riscv_vmflt_vf_f##TLEN##m##LMUL##_b##MLEN(a, fp##TLEN##_0, vl); \
         auto abs_a = __riscv_vfabs_v_f##TLEN##m##LMUL(a, vl);               \
                                                                              \
         /* ---  |a|^b --- */                                                 \
-        auto result = exp_ps(__riscv_vfmul_vv_f##TLEN##m##LMUL(b, log_ps(abs_a, vl), vl), vl); \
+        auto result = exp_ps_fp##TLEN(__riscv_vfmul_vv_f##TLEN##m##LMUL(b, log_ps_fp##TLEN(abs_a, vl), vl), vl); \
         COMPILER_BARRIER(); \
                                                                              \
         /* --- handle a < 0 --- */                                           \
         if(__riscv_vcpop_m_b##MLEN(neg_a_mask, vl) != 0) {                  \
-            auto b_int_mask = __vfloat32_is_integer_##LMUL(b, vl); \
+            auto b_int_mask = __vfloat##TLEN##_is_integer_##LMUL(b, vl); \
                                                                              \
-            auto b_even_mask = __vfloat32_is_even_##LMUL(b, vl);          \
+            auto b_even_mask = __vfloat##TLEN##_is_even_##LMUL(b, vl);          \
             auto b_not_even_mask = __riscv_vmnot_m_b##MLEN(b_even_mask, vl); \
                                                                              \
             /*  set to neg, a < 0 AND b is int AND b is not  even*/                           \

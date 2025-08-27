@@ -119,28 +119,28 @@ TEST(BinaryTestAddint, are_close_fp16_behavior) {
     
     // Test case 2: lhs = -59.1875, rhs = -59.2188
     {
-        half lhs(-59.1875f);
-        half rhs(-59.2188f);
+        half lhs(1.4375f);
+        half rhs(1.43652f);
         
         bool result = NttTest::are_close(lhs, rhs);
         
         float lhs_f = static_cast<float>(lhs);
         float rhs_f = static_cast<float>(rhs);
-        std::cout << "Test 2 - lhs: " << lhs_f << " (fp16: -59.1875), rhs: " << rhs_f << " (fp16: -59.2188)" 
+        std::cout << "Test 2 - lhs: " << lhs_f << " (fp16: 1.4375f), rhs: " << rhs_f << " (fp16: 1.43652)" 
                   << ", are_close result: " << (result ? "true" : "false")
                   << ", diff: " << std::abs(lhs_f - rhs_f) << std::endl;
     }
     
     // Test case 3: lhs = -7192, rhs = -7196
     {
-        half lhs(-7192.0f);
-        half rhs(-7196.0f);
+        half lhs(321.5f);
+        half rhs(321.25f);
         
         bool result = NttTest::are_close(lhs, rhs);
         
         float lhs_f = static_cast<float>(lhs);
         float rhs_f = static_cast<float>(rhs);
-        std::cout << "Test 3 - lhs: " << lhs_f << " (fp16: -7192), rhs: " << rhs_f << " (fp16: -7196)" 
+        std::cout << "Test 3 - lhs: " << lhs_f << " (fp16: 321.5), rhs: " << rhs_f << " (fp16: 321.25)" 
                   << ", are_close result: " << (result ? "true" : "false")
                   << ", diff: " << std::abs(lhs_f - rhs_f) << std::endl;
     }

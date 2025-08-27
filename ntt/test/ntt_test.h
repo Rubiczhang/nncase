@@ -160,7 +160,6 @@ void generate_random_tensor(TTensor &tensor, std::mt19937 &gen, [[maybe_unused]]
 template <typename T>
 T nextToNeg1(T x) {
     //TODO:  special handling for 0
-    // TODO: logic is wrong about negative numbers
     // std::cout << "x:" << x << std::endl;
     float x_f = static_cast<float>(x);
     x_f = std::fabs(x_f);
@@ -208,8 +207,15 @@ template <typename T> T ulp(T x) {
     }
 }
 
+template <typename T_proxy>
+requires requires { typename T_proxy::element_type; }
+typename T_proxy::element_type ulp(T_proxy x)
+{
+    return ulp((typename T_proxy::element_type)x);
+}
+
 template <typename T>
-bool are_close(T a, T b, double abs_tol = 1e-6,  double rel_tol = 1e-5) {
+bool are_close(T a, T b, float ulp_tlrce = 1, double abs_tol = 1e-6,  double rel_tol = 1e-5) {
     // The short-circuit for equality is important for performance and to handle infinities.
     if (a == b) {
         return true;
@@ -220,7 +226,6 @@ bool are_close(T a, T b, double abs_tol = 1e-6,  double rel_tol = 1e-5) {
     if constexpr (!std::is_integral_v<T>) {
         // std::cout << "std::fabs(a-b) " << std::fabs((a-b))  <<std::endl;
         // std::cout << "ulp(b):" <<ulp(b) << "   ulp(a)" << ulp(a) << std::endl;
-
         if (std::fabs(double(a - b)) <= double(ulp(b)) || std::fabs(double(a - b)) <= double(ulp(a))) {
             return true;
         }
@@ -242,7 +247,7 @@ bool are_close(T a, T b, double abs_tol = 1e-6,  double rel_tol = 1e-5) {
 
 template <typename T>
 requires(std::is_same_v<T, bool> || (requires { typename T::element_type; } && std::is_same_v<typename T::element_type, bool>))
-bool are_close(T a, T b, [[maybe_unused]] double abs_tol = 1e-6, [[maybe_unused]] double rel_tol = 1e-5) {
+bool are_close(T a, T b, float ulp_tlrce = 1.0, double abs_tol = 1e-6, double rel_tol = 1e-5) {
     return a == b;
 }
 
@@ -287,7 +292,7 @@ inline double calculate_cosine_similarity(const std::vector<double>& v1, const s
 }
 
 template <ntt::TensorOrVector TTensor1, ntt::TensorOrVector TTensor2>
-bool compare_tensor(TTensor1 &lhs, TTensor2 &rhs, double threshold = 0.999f) {
+bool compare_tensor(TTensor1 &lhs, TTensor2 &rhs, float ulp_tlrce = 1.0, double threshold = 0.999f) {
     if (lhs.shape().rank() != rhs.shape().rank()) {
         std::cout << "rank doesn't match\n" 
                 << "lhs.shape().rank():" << lhs.shape().rank()
@@ -320,7 +325,7 @@ bool compare_tensor(TTensor1 &lhs, TTensor2 &rhs, double threshold = 0.999f) {
             (rhs(index)));
         v1.push_back(d1);
         v2.push_back(d2);
-        if (!are_close(lvalue, rvalue)) {
+        if (!are_close(lvalue, rvalue, ulp_tlrce)) {
             // #ifndef NDEBUG
             std::cout << "index = (";
             for (size_t i = 0; i < index.rank(); i++)
@@ -348,7 +353,7 @@ bool compare_tensor(TTensor1 &lhs, TTensor2 &rhs, double threshold = 0.999f) {
 
 template <ntt::TensorOfVector TTensor1, ntt::TensorOfVector TTensor2>
     requires(TTensor1::element_type::rank() == 1)
-bool compare_tensor(TTensor1 &lhs, TTensor2 &rhs, double threshold = 0.999f) {
+bool compare_tensor(TTensor1 &lhs, TTensor2 &rhs, float ulp_tlrce = 1.0, double threshold = 0.999f) {
     using vector_type = typename TTensor1::element_type;
     constexpr size_t N = vector_type::template lane<0>();
     printf("N = %zu\n", N);
@@ -371,17 +376,17 @@ bool compare_tensor(TTensor1 &lhs, TTensor2 &rhs, double threshold = 0.999f) {
         const auto rvalue = rhs(index);
 
         nncase::ntt::apply(lvalue.shape(), [&](auto idx) {
-            auto d1 = static_cast<double>(
-                static_cast<typename decltype(lvalue)::element_type>(
-                    lvalue(idx)));
-            auto d2 = static_cast<double>(
-                static_cast<typename decltype(rvalue)::element_type>(
-                    rvalue(idx)));
+            auto val1 = static_cast<typename decltype(lvalue)::element_type>(lvalue(idx));
+            auto val2 = static_cast<typename decltype(lvalue)::element_type>(rvalue(idx));
+            auto d1 = static_cast<double>(val1);
+            auto d2 = static_cast<double>(val2);
             // auto d1 = int32_t(lvalue(idx));
+
             // auto d2 = int32_t(rvalue(idx));
+
             v1.push_back(d1);
             v2.push_back(d2);
-            if (!are_close(d1, d2)) {
+            if (!are_close(val1, val2, ulp_tlrce)) {
                 // #ifndef NDEBUG
                 std::cout << "index = (";
                 for (size_t i = 0; i < index.rank(); i++)
@@ -407,7 +412,7 @@ bool compare_tensor(TTensor1 &lhs, TTensor2 &rhs, double threshold = 0.999f) {
 template <ntt::TensorOfVector TTensor1, ntt::TensorOfVector TTensor2>
     requires(TTensor1::element_type::rank() == 2 &&
              TTensor2::element_type::rank() == 2)
-bool compare_tensor(TTensor1 &lhs, TTensor2 &rhs, double threshold = 0.999f) {
+bool compare_tensor(TTensor1 &lhs, TTensor2 &rhs, float ulp_tlrce = 1.0, double threshold = 0.999f) {
     using vector_type = typename TTensor1::element_type;
     constexpr size_t N0 = vector_type::template lane<0>();
     constexpr size_t N1 = vector_type::template lane<1>();
@@ -431,15 +436,13 @@ bool compare_tensor(TTensor1 &lhs, TTensor2 &rhs, double threshold = 0.999f) {
         const auto rvalue = rhs(index);
 
         nncase::ntt::apply(lvalue.shape(), [&](auto idx) {
-            auto d1 = static_cast<double>(
-                static_cast<typename decltype(lvalue)::element_type>(
-                    lvalue(idx)));
-            auto d2 = static_cast<double>(
-                static_cast<typename decltype(rvalue)::element_type>(
-                    rvalue(idx)));
+            auto val1 = static_cast<typename decltype(lvalue)::element_type>(lvalue(idx));
+            auto val2 = static_cast<typename decltype(lvalue)::element_type>(rvalue(idx));
+            auto d1 = static_cast<double>(val1);
+            auto d2 = static_cast<double>(val2);
             v1.push_back(d1);
             v2.push_back(d2);
-            if (!are_close(d1, d2)) {
+            if (!are_close(val1, val2, ulp_tlrce)) {
                 // #ifndef NDEBUG
                 std::cout << "index = (";
                 for (size_t i = 0; i < index.rank(); i++)

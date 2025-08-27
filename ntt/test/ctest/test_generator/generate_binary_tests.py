@@ -91,7 +91,6 @@ class BinaryTestGenerator(BaseTestGenerator):
 
         self.op_str_map_exhaustive = {
             "add": f"auto ort_output = ortki_Add(ort_input_lhs, ort_input_rhs);",
-            "pow": f"auto ort_output = ortki_Pow(ort_input_lhs, ort_input_rhs);",
             "swishb":  f"auto ort_output = ortki_SwishB(ort_input_lhs, ort_input_rhs);",
             "inner_product":  \
                             "static bool element_is_vec = ntt::Vector<typename decltype(ntt_input_lhs)::element_type>;\n" \
@@ -107,6 +106,7 @@ class BinaryTestGenerator(BaseTestGenerator):
             "mod": f"auto ort_output = ortki_Mod(ort_input_lhs, ort_input_rhs, 1);",
             "min":  self._generate_minmax_operation("ortki_Min"),
             "max":  self._generate_minmax_operation("ortki_Max"),
+            "pow": f"auto ort_output = ortki_Pow(ort_input_lhs, ort_input_rhs);",
             "floor_mod": lambda datatype: \
                 "auto ort_output = ortki_Mod(ort_input_lhs, ort_input_rhs, 0);" \
                 if datatype.cpp_type in self.integer_types and datatype.cpp_type not in self.types_need_cast_in_ort["default"] \
