@@ -88,27 +88,29 @@ class BinaryTestGenerator(BaseTestGenerator):
             "swishb": self._generate_ort_SwishB,
             "inner_product": self._generate_inner_product_operation,
         }
-        
-        self.op_str_map = {
+
+        self.op_str_map_exhaustive = {
             "add": f"auto ort_output = ortki_Add(ort_input_lhs, ort_input_rhs);",
-            "sub": f"auto ort_output = ortki_Sub(ort_input_lhs, ort_input_rhs);",
-            "mul": f"auto ort_output = ortki_Mul(ort_input_lhs, ort_input_rhs);",
-            "div": f"auto ort_output = ortki_Div(ort_input_lhs, ort_input_rhs);",
-            "ceil_div": "auto ort_output = ort_ceil_div(ort_input_lhs, ort_input_rhs);",
-            "floor_mod": lambda datatype: \
-                "auto ort_output = ortki_Mod(ort_input_lhs, ort_input_rhs, 0);" \
-                if datatype.cpp_type in self.integer_types and datatype.cpp_type not in self.types_need_cast_in_ort["default"] \
-                else "auto ort_output = ortki_Sub(ort_input_lhs, ortki_Mul(ortki_Floor(ortki_Div(ort_input_lhs, ort_input_rhs)), ort_input_rhs));",
-            "mod": f"auto ort_output = ortki_Mod(ort_input_lhs, ort_input_rhs, 1);",
-            "min":  self._generate_minmax_operation("ortki_Min"),
-            "max":  self._generate_minmax_operation("ortki_Max"),
-            # "pow": f"auto ort_output = ortki_Pow(ort_input_lhs, ort_input_rhs);",
+            "pow": f"auto ort_output = ortki_Pow(ort_input_lhs, ort_input_rhs);",
             "swishb":  f"auto ort_output = ortki_SwishB(ort_input_lhs, ort_input_rhs);",
             "inner_product":  \
                             "static bool element_is_vec = ntt::Vector<typename decltype(ntt_input_lhs)::element_type>;\n" \
                             "   auto ort_output = ortki_inner_product(ort_input_lhs, ort_input_rhs, element_is_vec); " ,
             "outer_product":  \
                             "   auto ort_output =ortki_Mul(ort_input_lhs, ort_input_rhs); " 
+        }
+        self.op_str_map_simplified = {
+            "sub": f"auto ort_output = ortki_Sub(ort_input_lhs, ort_input_rhs);",
+            "mul": f"auto ort_output = ortki_Mul(ort_input_lhs, ort_input_rhs);",
+            "div": f"auto ort_output = ortki_Div(ort_input_lhs, ort_input_rhs);",
+            "ceil_div": "auto ort_output = ort_ceil_div(ort_input_lhs, ort_input_rhs);",
+            "mod": f"auto ort_output = ortki_Mod(ort_input_lhs, ort_input_rhs, 1);",
+            "min":  self._generate_minmax_operation("ortki_Min"),
+            "max":  self._generate_minmax_operation("ortki_Max"),
+            "floor_mod": lambda datatype: \
+                "auto ort_output = ortki_Mod(ort_input_lhs, ort_input_rhs, 0);" \
+                if datatype.cpp_type in self.integer_types and datatype.cpp_type not in self.types_need_cast_in_ort["default"] \
+                else "auto ort_output = ortki_Sub(ort_input_lhs, ortki_Mul(ortki_Floor(ortki_Div(ort_input_lhs, ort_input_rhs)), ort_input_rhs));",
         }
 
     def _generate_minmax_operation(self, operation_func):
@@ -525,7 +527,15 @@ class BinaryTestGenerator(BaseTestGenerator):
 
     def generate_ort_output(self, datatype, ntt_op_str):
         ort_type = self.ort_datatype_map.get(datatype.cpp_type, 'DataType_FLOAT')
-        op_str = self.op_str_map[ntt_op_str]
+        
+        # Check both dictionaries for the operation string
+        if ntt_op_str in self.op_str_map_exhaustive:
+            op_str = self.op_str_map_exhaustive[ntt_op_str]
+        elif ntt_op_str in self.op_str_map_simplified:
+            op_str = self.op_str_map_simplified[ntt_op_str]
+        else:
+            raise KeyError(f"Operation '{ntt_op_str}' not found in either op_str_map_exhaustive or op_str_map_simplified")
+            
         if callable(op_str):
          op_str = op_str(datatype)
         return [
@@ -856,25 +866,16 @@ class BinaryTestGenerator(BaseTestGenerator):
         
         return "\n".join(test_cases)
 
-    def generate_all_tests_for_type(self, datatype, op_str):
-        code = []
-        
-        # Define combinations for test cases
+
+    def _get_param_combinations(self, op_str):
         is_dynamic_options = [False, True]
         is_view_options = [False, True]
         vector_rank_options = [0, 1, 2]  # 0: tensor, 1: 1d vector, etc. Keep it simple for now
 
-        code.append(self.generate_header())
-
-        # Generate custom ORT functions if needed
-        if op_str in self.ort_custom_function:
-            custom_op_code = self.generate_ort_custom_op(datatype, op_str)
-            code.append(custom_op_code)
-
         # Choose appropriate dims_specs based on op_str
         dims_specs_to_use = self.dims_specs_options.get(op_str, self.dims_specs_options["default"])
         
-        param_combinations = itertools.product(
+        param_combinations_exhausitive = itertools.product(
             is_dynamic_options,          # lhs_is_dynamic_shape 2
             is_dynamic_options,          # rhs_is_dynamic_shape 2
             dims_specs_to_use,           # (lhs_dims_spec, rhs_dims_spec) 6
@@ -883,7 +884,33 @@ class BinaryTestGenerator(BaseTestGenerator):
             self.simple_continuities,         # lhs_continuity
             self.simple_continuities          # rhs_continuity
         )
-        # 2*2*6*3*3*2*2*2*2/4 = 3456/4 = 864
+        param_combinations_simplified = itertools.product(
+            is_dynamic_options,         # lhs_is_dynamic_shape 2
+            is_dynamic_options,         # rhs_is_dynamic_shape 2
+            [([2, 3, 16, 16], [2, 3, 16, 16])], # (lhs_dims_spec, rhs_dims_spec)
+            vector_rank_options,        # lhs_vector_rank 3
+            vector_rank_options,        # rhs_vector_rank  3
+            [Continuity(is_contiguous=True, non_contiguous_dim=None, big_tensor_op=None)],  # lhs_continuity
+            [Continuity(is_contiguous=True, non_contiguous_dim=None, big_tensor_op=None)]
+        )
+        if op_str in self.op_str_map_exhaustive:
+            return param_combinations_exhausitive
+        else:
+            return param_combinations_simplified
+
+
+    def generate_all_tests_for_type(self, datatype, op_str):
+        code = []
+        
+        code.append(self.generate_header())
+
+        # Generate custom ORT functions if needed
+        if op_str in self.ort_custom_function:
+            custom_op_func = self.generate_ort_custom_op(datatype, op_str)
+            code.append(custom_op_func)
+
+        param_combinations = self._get_param_combinations(op_str)
+
         for lhs_is_dynamic, rhs_is_dynamic, (lhs_shape, rhs_shape), lhs_vec_rank, rhs_vec_rank, lhs_continuity, rhs_continuity in param_combinations:
             # Skip invalid combinations if any in the future
             # one element but not contiguous
@@ -908,30 +935,20 @@ class BinaryTestGenerator(BaseTestGenerator):
                 # 1. lhs is neg or pos, rhs is int
                 # 2. lhs is pos, rhs is float
                 test_code = self._generate_pow_test_case_pair(
-                    datatype, datatype,
-                    lhs_is_dynamic_shape=lhs_is_dynamic,
-                    rhs_is_dynamic_shape=rhs_is_dynamic,
-                    lhs_dims_spec=lhs_shape,
-                    rhs_dims_spec=rhs_shape,
-                    lhs_vector_rank=lhs_vec_rank,
-                    rhs_vector_rank=rhs_vec_rank,
-                    lhs_continuity=lhs_continuity,
-                    rhs_continuity=rhs_continuity,
-                    ntt_op_str=op_str
+                    datatype, datatype, lhs_is_dynamic_shape=lhs_is_dynamic,
+                    rhs_is_dynamic_shape=rhs_is_dynamic, lhs_dims_spec=lhs_shape,
+                    rhs_dims_spec=rhs_shape, lhs_vector_rank=lhs_vec_rank,
+                    rhs_vector_rank=rhs_vec_rank, lhs_continuity=lhs_continuity,
+                    rhs_continuity=rhs_continuity, ntt_op_str=op_str
                 )
                 code.append(test_code)
             else:
                 test_code = self.generate_test_case(
-                    datatype, datatype,
-                    lhs_is_dynamic_shape=lhs_is_dynamic,
-                    rhs_is_dynamic_shape=rhs_is_dynamic,
-                    lhs_dims_spec=lhs_shape,
-                    rhs_dims_spec=rhs_shape,
-                    lhs_vector_rank=lhs_vec_rank,
-                    rhs_vector_rank=rhs_vec_rank,
-                    lhs_continuity=lhs_continuity,
-                    rhs_continuity=rhs_continuity,
-                    ntt_op_str=op_str
+                    datatype, datatype, lhs_is_dynamic_shape=lhs_is_dynamic,
+                    rhs_is_dynamic_shape=rhs_is_dynamic, lhs_dims_spec=lhs_shape,
+                    rhs_dims_spec=rhs_shape, lhs_vector_rank=lhs_vec_rank,
+                    rhs_vector_rank=rhs_vec_rank, lhs_continuity=lhs_continuity,
+                    rhs_continuity=rhs_continuity, ntt_op_str=op_str
                 )
                 code.append(test_code)
 
@@ -979,8 +996,8 @@ if __name__ == "__main__":
         
     #     print(f"Test file generated: {output_filepath}")
     #     generated_filenames.append(filename)
-    
-    for op_str in generator.op_str_map.keys():
+
+    for op_str in (generator.op_str_map_exhaustive.keys() | generator.op_str_map_simplified.keys()):
         generate_tests_for_op(op_str, generator)
     # Generate cmake list file in the generated directory
     generate_cmake_list(generated_directory, generated_filenames, "generated_binary_tests.cmake", "GENERATED_BINARY_TEST_SOURCES")
