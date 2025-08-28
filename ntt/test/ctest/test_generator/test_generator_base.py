@@ -518,6 +518,7 @@ using namespace ortki;
             lines.append(f"NttTest::ort2ntt({ort_output_var_name}, {golden_var_name});")
             lines.append(f"EXPECT_TRUE(NttTest::compare_tensor({ntt_output_to_compare}, {golden_var_name}));")
         elif cast_mode == 2:  #  cast in ntt
+            # ort_type means data type(float, int, double,...)of ort tensor
             golden_ntt_in_ort_type_var = f"ntt_golden_{ort_type}"
             golden_cpp_type = output_element_cpp_type.replace(datatype.cpp_type, ort_type)
 
@@ -540,11 +541,75 @@ using namespace ortki;
 
             lines.append(f"EXPECT_TRUE(NttTest::compare_tensor({ntt_output_var_name}, *{golden_origin_var}));")
         elif cast_mode == 4:   # cast in ort
-            lines.append(f"EXPECT_TRUE(NttTest::compare_tensor(ntt_golden, ntt_output));")
+            lines.append(f"EXPECT_TRUE(NttTest::compare_tensor( ntt_output, ntt_golden));")
 
         lines.append("}")
         lines.append("")
         return lines
+
+    def generate_ort_back2ntt(self,
+                                datatype: DataType,
+                                output_element_cpp_type: str,
+                                output_shape_expr: str,
+                                cast_mode: int,
+                                ntt_output_var_name: str = "ntt_output1",
+                                ort_output_var_name: str = "ort_output",
+                                ort_type: str = "double"):
+
+
+        """Generate code to convert ORT output back to NTT tensor (golden)"""
+        lines = ["// ------------------------------------------------------------------",
+                 "// 3. convert ORT output back to NTT tensor (golden) ",
+                 "// ------------------------------------------------------------------"]
+        golden_var_name = "ntt_golden"  # Default name if no cast_mode
+        if cast_mode == 0:  #  no cast
+            golden_var_name = "ntt_golden"
+            lines.append(f"auto {golden_var_name} = ntt::make_tensor<{output_element_cpp_type}>({output_shape_expr});")
+            lines.append(f"NttTest::ort2ntt({ort_output_var_name}, {golden_var_name});")
+        elif cast_mode == 1:  # fp8 with uint8 comparison
+            ntt_output_to_compare = f"{ntt_output_var_name}_uint8"
+            golden_var_name = "ntt_golden_uint8"
+            golden_cpp_type = "uint8_t" if "vector" not in output_element_cpp_type else output_element_cpp_type.replace(datatype.cpp_type, "uint8_t")
+
+            lines.append(f"auto {golden_var_name} = ntt::make_tensor<{golden_cpp_type}>({output_shape_expr});")
+            lines.append(f"NttTest::ort2ntt({ort_output_var_name}, {golden_var_name});")
+        elif cast_mode == 2:  #  cast in ntt
+            golden_ntt_in_ort_type_var = f"ntt_golden_{ort_type}"
+            golden_cpp_type = output_element_cpp_type.replace(datatype.cpp_type, ort_type)
+
+            lines.append(f"// Golden output is in ort_type, cast it back to datatype.cpp_type for comparison")
+            lines.append(f"auto {golden_ntt_in_ort_type_var} = ntt::make_unique_tensor<{golden_cpp_type}>({output_shape_expr});")
+            lines.append(f"NttTest::ort2ntt({ort_output_var_name}, *{golden_ntt_in_ort_type_var});")
+
+            golden_signed_int_var = "ntt_golden_signed_int"
+            if datatype.cpp_type in ["uint8_t", "uint16_t", "uint32_t", "uint64_t"]:
+                int_tensor_cpp_type = output_element_cpp_type.replace(datatype.cpp_type, "int64_t")
+                lines.append(f"auto {golden_signed_int_var} = ntt::make_unique_tensor<{int_tensor_cpp_type}>({output_shape_expr});")
+                lines.append(f"ntt::cast(*{golden_ntt_in_ort_type_var}, *{golden_signed_int_var});")
+                golden_cast_source_var = golden_signed_int_var
+            else:
+                golden_cast_source_var = golden_ntt_in_ort_type_var
+            
+            golden_var_name = "*ntt_golden"
+            lines.append(f"auto {generate_var_name} = ntt::make_unique_tensor<{output_element_cpp_type}>({output_shape_expr});")
+            lines.append(f"ntt::cast(*{golden_cast_source_var}, {golden_var_name});")
+
+
+        return lines, golden_var_name
+
+    def generate_compare(
+        self,
+        ntt_output_var_name: str = "ntt_output",
+        golden_var_name: str = "ntt_golden",
+        ulp_tolerances = 1
+    ) -> list[str]:
+        """Generate comparison code between NTT output and golden output."""
+        lines =[]
+        lines.append(f"EXPECT_TRUE(NttTest::compare_tensor({ntt_output_var_name}, {golden_var_name}, {ulp_tolerances}));")
+        lines.append("}")
+        lines.append("")
+        return lines
+
 
 def get_numeric_value(value_str: str, cpp_type: str) -> float:
     """Extract numeric value from string representation based on cpp_type"""

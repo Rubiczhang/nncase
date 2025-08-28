@@ -173,7 +173,17 @@ T nextToNeg1(T x) {
     // std::cout << "x_abs:" << x_abs << std::endl;
     
     int_type x_i = std::bit_cast<int_type>(x_abs);
+
+    // Special handling for +0: next toward -1 is the smallest negative subnormal
+    if (x_i == int_type{0}) {
+        constexpr int_type sign = int_type(1) << (sizeof(T) * 8 - 1);
+        constexpr int_type lsb  = int_type{1};
+        int_type result = (sign | lsb);
+        return std::bit_cast<T>(result);
+    }
+
     x_i = (x_i - 1);  
+
     T x_lower = std::bit_cast<T>(x_i);
     // std::cout << "x_lower" << x_lower <<std::endl;
     return x_lower;
@@ -215,7 +225,7 @@ typename T_proxy::element_type ulp(T_proxy x)
 }
 
 template <typename T>
-bool are_close(T a, T b, float ulp_tlrce = 1, double abs_tol = 1e-6,  double rel_tol = 1e-5) {
+bool are_close(T a, T b,[[maybe_unused]] float ulp_tlrce = 1, double abs_tol = 1e-6,  double rel_tol = 1e-5) {
     // The short-circuit for equality is important for performance and to handle infinities.
     if (a == b) {
         return true;
@@ -226,9 +236,13 @@ bool are_close(T a, T b, float ulp_tlrce = 1, double abs_tol = 1e-6,  double rel
     if constexpr (!std::is_integral_v<T>) {
         // std::cout << "std::fabs(a-b) " << std::fabs((a-b))  <<std::endl;
         // std::cout << "ulp(b):" <<ulp(b) << "   ulp(a)" << ulp(a) << std::endl;
-        if (std::fabs(double(a - b)) <= double(ulp(b)) || std::fabs(double(a - b)) <= double(ulp(a))) {
+        if (std::fabs(double(a - b)) <= ulp_tlrce*double(ulp(b)) || std::fabs(double(a - b)) <= ulp_tlrce*double(ulp(a))) {
             return true;
         }
+        std::cout << "a(ntt_result): " << double(a) <<" b (golden_result): " << double(b) <<std::endl;
+        std::cout << "std::fabs(a-b) " << std::fabs((double)(a-b))  <<std::endl;
+        std::cout << "ulp(a):" <<(double)ulp(a) << "   ulp(b):" << (double)ulp(b) << std::endl;
+        std::cout << "ulp tolerance:" << ulp_tlrce* double(ulp(a)) << std::endl;
     }
     
     // Special handling for float type: if a is float_max_from_exp and b is greater than float_max_from_exp, return true
@@ -247,7 +261,7 @@ bool are_close(T a, T b, float ulp_tlrce = 1, double abs_tol = 1e-6,  double rel
 
 template <typename T>
 requires(std::is_same_v<T, bool> || (requires { typename T::element_type; } && std::is_same_v<typename T::element_type, bool>))
-bool are_close(T a, T b, float ulp_tlrce = 1.0, double abs_tol = 1e-6, double rel_tol = 1e-5) {
+bool are_close(T a, T b,[[maybe_unused]] float ulp_tlrce = 1.0,[[maybe_unused]] double abs_tol = 1e-6, [[maybe_unused]]double rel_tol = 1e-5) {
     return a == b;
 }
 

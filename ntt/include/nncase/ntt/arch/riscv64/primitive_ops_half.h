@@ -652,8 +652,8 @@ REGISTER_RVV_BINARY_FP16_OP(div, half, div_float16)
         return pow_ps_fp16(v1, v2, vl);                                        \
     }
 
-REGISTER_RVV_FP16_KERNEL(POW_FLOAT16)
-REGISTER_RVV_BINARY_FP16_OP(pow, half, pow_float16)
+// REGISTER_RVV_FP16_KERNEL(POW_FLOAT16)
+// REGISTER_RVV_BINARY_FP16_OP(pow, half, pow_float16)
 
 #define LMUL_DBL_1 2
 #define LMUL_DBL_2 4

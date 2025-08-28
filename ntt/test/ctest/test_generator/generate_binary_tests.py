@@ -113,6 +113,22 @@ class BinaryTestGenerator(BaseTestGenerator):
                 else "auto ort_output = ortki_Sub(ort_input_lhs, ortki_Mul(ortki_Floor(ortki_Div(ort_input_lhs, ort_input_rhs)), ort_input_rhs));",
         }
 
+        self.ulp_tolerances  = {
+            "pow": {
+                "default": 4
+            },
+            "default": {
+                "default": 1
+            }
+        }
+
+
+    def _get_ulp_tolerance(self, op_str, datatype):
+        """Get the ULP tolerance for a specific operation and data type."""
+        if op_str in self.ulp_tolerances:
+            return self.ulp_tolerances[op_str].get(datatype.cpp_type, self.ulp_tolerances[op_str]["default"])
+        return self.ulp_tolerances["default"].get(datatype.cpp_type, self.ulp_tolerances["default"]["default"])
+
     def _generate_minmax_operation(self, operation_func):
         """Generate code for min/max operations with reduced duplication"""
         return (
@@ -776,14 +792,26 @@ class BinaryTestGenerator(BaseTestGenerator):
         if(datatype.cpp_type in self.types_need_cast_in_ntt): # fp8 
             cast_mode = 4
         
-        compare_code = self.generate_ort_back2ntt_and_compare_section(
+        cast_code, golden_var_name = self.generate_ort_back2ntt(
             datatype,
             output_element_type,
             output_shape_expr,
             cast_mode=cast_mode,
             ntt_output_var_name="ntt_output",
             ort_output_var_name="ort_golden")
+        
+
+        code.extend([f"    {line}" for line in cast_code])
+
+        compare_code = self.generate_compare(
+            ntt_output_var_name = "ntt_output",
+            golden_var_name = golden_var_name,
+            ulp_tolerances = self._get_ulp_tolerance(ntt_op_str, datatype)
+
+        )
+
         code.extend([f"    {line}" for line in compare_code])
+
 
         return "\n".join(code)
 
